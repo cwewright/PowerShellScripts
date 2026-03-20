@@ -47,46 +47,21 @@ $colOrgLevelDescription    = 'cr_orgleveldescription'
 $colOrgLevelNumber         = 'cr_orglevelnumber'
 
 # -------------------------------------------------------------------
-# 2. AUTHENTICATE TO UKG PRO REST API
+# 2. BUILD UKG PRO REST API HEADERS
 # -------------------------------------------------------------------
-# UKG Pro REST API uses a session-based login that returns a token.
-# Endpoint: POST /api/login
-# Headers:  US-Customer-Api-Key, Authorization (Basic), Content-Type
+# UKG Pro REST API authenticates per-request via headers:
+#   - US-Customer-Api-Key: your customer API key
+#   - Authorization: Usr {username}:{password}
+# No login/logout endpoints — credentials are sent on every call.
 # -------------------------------------------------------------------
-
-$authString = [Convert]::ToBase64String(
-    [Text.Encoding]::ASCII.GetBytes("${ukgUsername}:${ukgPassword}")
-)
-
-$loginHeaders = @{
-    'US-Customer-Api-Key' = $customerApiKey
-    'Authorization'       = "Basic $authString"
-    'Content-Type'        = 'application/json'
-}
-
-Write-Output "Authenticating to UKG Pro REST API..."
-$loginResponse = Invoke-RestMethod -Uri "$ukgBaseUrl/api/login" `
-    -Method POST -Headers $loginHeaders -Body '{}'
-
-# The login response returns a token in the response header or body.
-# Depending on your UKG instance, the token may be in the response directly.
-$authToken = $loginResponse.Token
-if (-not $authToken) {
-    # Some instances return it differently — check common patterns
-    $authToken = $loginResponse.token
-}
-
-if (-not $authToken) {
-    throw "Failed to authenticate to UKG. Check credentials and Customer API Key."
-}
 
 $apiHeaders = @{
     'US-Customer-Api-Key' = $customerApiKey
-    'Authorization'       = "Bearer $authToken"
+    'Authorization'       = "Usr $($ukgUsername):$($ukgPassword)"
     'Content-Type'        = 'application/json'
 }
 
-Write-Output "UKG authentication successful."
+Write-Output "UKG API headers configured."
 
 # -------------------------------------------------------------------
 # 3. RETRIEVE ORG LEVELS 1-4
@@ -241,13 +216,4 @@ foreach ($dept in $uniqueDepts) {
 
 Write-Output "Done. Created: $created | Skipped (already exist): $skipped"
 
-# -------------------------------------------------------------------
-# 8. LOGOUT FROM UKG
-# -------------------------------------------------------------------
-try {
-    Invoke-RestMethod -Uri "$ukgBaseUrl/api/logout" -Method POST -Headers $apiHeaders | Out-Null
-    Write-Output "UKG session closed."
-}
-catch {
-    Write-Warning "Could not cleanly log out of UKG: $($_.Exception.Message)"
-}
+# No logout needed — UKG REST API is stateless (per-request auth).
